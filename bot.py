@@ -35,15 +35,8 @@ def save_data(data):
 
 # Test hook - bot should respond to any message starting with !
 @bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-    if message.content.startswith("!"):
-        await message.channel.send("🤖 排班機器人回應中...")
-    await bot.process_commands(message)
-
-@bot.command()
-async def help_cmd(message):
+async def on_ready():
+    print(f"Bot ready: {bot.user}")
     embed = discord.Embed(title="📋 排班機器人指令", color=0x00ff00)
     embed.add_field(name="成員指令", value="!register [ID] [職業] [戰力] - 報名\n!leave [ID] - 請假", inline=False)
     embed.add_field(name="幹部指令", value="!add [ID] [職業] [戰力] - 手動加入\n!team [ID] [隊伍] - 分隊\n!remove [ID] - 移除", inline=False)
