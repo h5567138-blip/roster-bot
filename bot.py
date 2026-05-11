@@ -13,8 +13,7 @@ from datetime import datetime
 TOKEN = os.getenv("DISCORD_TOKEN")
 DATA_FILE = "roster_data.json"
 
-intents = discord.Intents.default()
-intents.message_content = True
+intents = discord.Intents(message_content=True)
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 def load_data():
