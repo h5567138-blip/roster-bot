@@ -1,0 +1,11 @@
+services:
+  - name: roster-bot
+    github:
+      owner: h5567138-blip
+      repo: roster-bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+    plan: free
