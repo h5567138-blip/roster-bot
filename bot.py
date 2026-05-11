@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
 
+import threading
+from flask import Flask
 import discord
 from discord.ext import commands
 import json
 import os
 from datetime import datetime
+
+# Flask for keeping port open
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return 'Bot is running!'
+
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 DATA_FILE = "roster_data.json"
@@ -141,4 +152,11 @@ async def on_ready():
     print(f"Bot ready: {bot.user}")
 
 if __name__ == "__main__":
+    bot.run(TOKEN)
+
+if __name__ == "__main__":
+    # Start Flask in background thread
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    # Run bot
     bot.run(TOKEN)
