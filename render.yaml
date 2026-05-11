@@ -1,9 +1,11 @@
 services:
-  - name: roster-bot
-    type: web
+  - type: web
+    name: roster-bot
+    runtime: python
     github:
       owner: h5567138-blip
       repo: roster-bot
+    branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
