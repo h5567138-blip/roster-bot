@@ -1,5 +1,6 @@
 services:
   - name: roster-bot
+    type: web
     github:
       owner: h5567138-blip
       repo: roster-bot
