@@ -27,14 +27,14 @@ def save_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 @bot.command()
-async def 報名(ctx, id: str, 職業: str, 戰力: int):
+async def register(ctx, id: str, 職業: str, 戰力: int):
     data = load_data()
     data["members"][id] = {"職業": 職業, "戰力": 戰力, "狀態": "報名", "隊伍": None}
     save_data(data)
     await ctx.send(f"OK {id} - {職業} 戰力{戰力}")
 
 @bot.command()
-async def 請假(ctx, id: str):
+async def leave(ctx, id: str):
     data = load_data()
     if id in data["members"]:
         data["members"][id]["狀態"] = "請假"
@@ -44,7 +44,7 @@ async def 請假(ctx, id: str):
         await ctx.send(f"Error 找不到 {id}")
 
 @bot.command()
-async def 加入(ctx, id: str, 職業: str, 戰力: int):
+async def add(ctx, id: str, 職業: str, 戰力: int):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("Error 幹部專用")
         return
@@ -54,7 +54,7 @@ async def 加入(ctx, id: str, 職業: str, 戰力: int):
     await ctx.send(f"OK 已加入 {id}")
 
 @bot.command()
-async def 分隊(ctx, id: str, 隊伍: str):
+async def team(ctx, id: str, 隊伍: str):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("Error 幹部專用")
         return
@@ -67,7 +67,7 @@ async def 分隊(ctx, id: str, 隊伍: str):
         await ctx.send(f"Error 找不到 {id}")
 
 @bot.command()
-async def 移除(ctx, id: str):
+async def remove(ctx, id: str):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("Error 幹部專用")
         return
@@ -80,7 +80,7 @@ async def 移除(ctx, id: str):
         await ctx.send(f"Error 找不到 {id}")
 
 @bot.command()
-async def 清單(ctx):
+async def list_members(ctx):
     data = load_data()
     msg = "成員列表:\n"
     for id, info in data["members"].items():
@@ -89,7 +89,7 @@ async def 清單(ctx):
     await ctx.send(msg)
 
 @bot.command()
-async def 產出(ctx):
+async def output(ctx):
     data = load_data()
     today = datetime.now().strftime("%Y/%m/%d")
     msg = f"=== 隊伍名單 {today} ===\n\n"
