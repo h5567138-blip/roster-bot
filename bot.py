@@ -58,7 +58,32 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
-bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
+class DrakeBot(commands.Bot):
+    async def setup_hook(self):
+        from view_manager import register_views
+
+        views = [
+            ("PlayerMenuLauncher", lambda: PlayerMenuLauncher()),
+            ("PlayerSelfServiceView", lambda: PlayerSelfServiceView()),
+            ("AdminMenuView", lambda: AdminMenuView()),
+            ("LotteryEntryView", lambda: LotteryEntryView()) if LotteryEntryView else None,
+            ("VoiceChannelDrawView", lambda: VoiceChannelDrawView()),
+            ("ChatMemberLotteryView", lambda: ChatMemberLotteryView()),
+        ]
+
+        views = [v for v in views if v]
+
+        await register_views(self, views)
+
+        try:
+            synced = await self.tree.sync()
+            print(f"Slash commands synced: {len(synced)}")
+            print("Slash command names:", ", ".join(cmd.name for cmd in synced))
+        except Exception as ex:
+            print(f"[Slash Sync] {type(ex).__name__}: {ex}")
+
+
+bot = DrakeBot(command_prefix="!", intents=intents, help_command=None)
 
 # ---------- JSON ----------
 def now_text():
@@ -1878,33 +1903,10 @@ async def on_app_command_error(interaction: discord.Interaction, error):
 
 @bot.event
 async def on_ready():
-    if not getattr(bot, "_persistent_registered", False):
-        persistent_views = [
-            ("PlayerMenuLauncher", PlayerMenuLauncher()),
-            ("PlayerSelfServiceView", PlayerSelfServiceView()),
-            ("AdminMenuView", AdminMenuView()),
-            ("LotteryEntryView", LotteryEntryView()),
-            ("VoiceChannelDrawView", VoiceChannelDrawView()),
-            ("ChatMemberLotteryView", ChatMemberLotteryView()),
-        ]
-
-        for view_name, view in persistent_views:
-            try:
-                bot.add_view(view)
-                print(f"Persistent view registered: {view_name}")
-            except Exception as ex:
-                print(f"[Persistent View:{view_name}] {type(ex).__name__}: {ex}")
-
-        try:
-            synced = await bot.tree.sync()
-            print(f"Slash commands synced: {len(synced)}")
-            print("Slash command names:", ", ".join(cmd.name for cmd in synced))
-        except Exception as ex:
-            print(f"[Slash Sync] {type(ex).__name__}: {ex}")
-
-        bot._persistent_registered = True
-
+    print("==============================")
     print(f"Bot ready: {bot.user}")
+    print(f"Latency: {bot.latency}")
+    print("==============================")
 
 if __name__ == "__main__":
     if not TOKEN:
