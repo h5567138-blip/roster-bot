@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Environment
+.env
+.token
+*.log
+
+# Backups
+*.bak
+*.backup_*
+*.tar.gz
+
+# Data files (keep template if needed)
+roster_data.json
+roster_data_latest.json
+lottery_data.json
+tips_data.json
+
+# Generated
+generated/
+bot_new.py
+bot_simple.py
+
+# OS
+.DS_Store
+Thumbs.db
