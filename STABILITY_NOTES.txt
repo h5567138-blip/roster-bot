@@ -1,0 +1,20 @@
+Stability Watchdog V2
+
+Key fixes:
+- Persistent Views stay in setup_hook().
+- Removed py-cord from requirements. Do NOT install py-cord together with discord.py.
+- Runtime log: logs/bot_runtime.log (rotating 5MB x 5).
+- discord.py heartbeat/gateway warnings are captured.
+- asyncio event-loop lag monitor every 10 seconds.
+- independent OS-thread watchdog:
+  if Discord asyncio loop does not advance for >120 sec, exit code 75.
+  This prevents Flask from looking healthy forever while Discord is frozen.
+- logs prefix commands/errors, slash errors, disconnect/resume, ready.
+- Pillow roster generation runs via asyncio.to_thread().
+
+When failure occurs search log for:
+Heartbeat blocked
+[WATCHDOG]
+[GATEWAY]
+[PREFIX ERROR]
+[SLASH ERROR]

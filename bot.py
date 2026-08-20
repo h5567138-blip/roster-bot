@@ -12,6 +12,10 @@ import uuid
 import asyncio
 import io
 import random
+import logging
+import logging.handlers
+import time
+import sys
 from pathlib import Path
 from datetime import datetime
 
@@ -27,10 +31,42 @@ except Exception:
 
 try:
     from lottery import LotteryCreateView, LotteryEntryView, lottery_history_embed
-except Exception:
+except Exception as ex:
     LotteryCreateView = None
+    LotteryEntryView = None
+    lottery_history_embed = None
+    print(f"[IMPORT][lottery] {type(ex).__name__}: {ex}")
 
 BASE_DIR = Path(__file__).resolve().parent
+
+# ---------- Logging / Runtime diagnostics ----------
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+BOT_LOG_FILE = LOG_DIR / "bot_runtime.log"
+
+logger = logging.getLogger("roster_bot")
+logger.setLevel(logging.INFO)
+
+if not logger.handlers:
+    _fmt = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    _console = logging.StreamHandler(sys.stdout)
+    _console.setFormatter(_fmt)
+    logger.addHandler(_console)
+
+    _file = logging.handlers.RotatingFileHandler(
+        BOT_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
+    _file.setFormatter(_fmt)
+    logger.addHandler(_file)
+
+    _discord_logger = logging.getLogger("discord")
+    _discord_logger.setLevel(logging.INFO)
+    _discord_logger.addHandler(_file)
+
+_event_loop_heartbeat = {"last": time.monotonic(), "started": False}
 DATA_FILE = BASE_DIR / "roster_data.json"
 LOTTERY_FILE = BASE_DIR / "lottery_data.json"
 TIPS_FILE = BASE_DIR / "tips_data.json"
@@ -80,10 +116,59 @@ class DrakeBot(commands.Bot):
             print(f"Slash commands synced: {len(synced)}")
             print("Slash command names:", ", ".join(cmd.name for cmd in synced))
         except Exception as ex:
-            print(f"[Slash Sync] {type(ex).__name__}: {ex}")
+            logger.exception("[Slash Sync] %s: %s", type(ex).__name__, ex, exc_info=ex)
+
+        self.loop.create_task(event_loop_monitor(), name="event_loop_monitor")
+        logger.info("[SETUP] persistent views registered; slash sync finished; monitor scheduled")
 
 
 bot = DrakeBot(command_prefix="!", intents=intents, help_command=None)
+
+# ---------- Discord runtime watchdog ----------
+async def event_loop_monitor():
+    interval = 10.0
+    expected = time.monotonic() + interval
+    _event_loop_heartbeat["started"] = True
+    logger.info("[WATCHDOG] asyncio event-loop monitor started")
+
+    while not bot.is_closed():
+        await asyncio.sleep(interval)
+        now = time.monotonic()
+        lag = max(0.0, now - expected)
+        _event_loop_heartbeat["last"] = now
+
+        if lag >= 5.0:
+            logger.warning(
+                "[WATCHDOG] event-loop lag=%.2fs discord_latency=%s",
+                lag,
+                f"{bot.latency:.3f}s" if bot.latency != float("inf") else "inf"
+            )
+        expected = now + interval
+
+
+def process_watchdog():
+    # Flask may remain healthy even if Discord's asyncio loop is frozen.
+    # This independent thread detects that condition.
+    timeout = 120.0
+    logger.info("[WATCHDOG] process watchdog started timeout=%.0fs", timeout)
+
+    while True:
+        time.sleep(15)
+        if not _event_loop_heartbeat["started"]:
+            continue
+
+        age = time.monotonic() - _event_loop_heartbeat["last"]
+        if age > timeout:
+            logger.critical(
+                "[WATCHDOG] Discord event loop frozen for %.1fs; exiting for supervisor restart",
+                age
+            )
+            os._exit(75)
+
+
+async def safe_generate_roster_image(guild_id, guild_name=""):
+    return await asyncio.to_thread(generate_roster_image, guild_id, guild_name)
+
 
 # ---------- JSON ----------
 def now_text():
@@ -1093,7 +1178,7 @@ class AdminMenuView(ui.View):
             await interaction.response.send_message("❌ 管理員專用。", ephemeral=True); return
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            p = generate_roster_image(interaction.guild_id, interaction.guild.name)
+            p = await safe_generate_roster_image(interaction.guild_id, interaction.guild.name)
             await interaction.followup.send("✅ 班表圖片已產生。", file=discord.File(p), ephemeral=True)
         except Exception as ex:
             await interaction.followup.send(f"❌ 產圖失敗：{ex}", ephemeral=True)
@@ -1843,7 +1928,7 @@ async def roster(ctx):
 async def output(ctx):
     if not is_admin(ctx.author):
         await ctx.send("❌ 管理員專用。"); return
-    p = generate_roster_image(ctx.guild.id, ctx.guild.name)
+    p = await safe_generate_roster_image(ctx.guild.id, ctx.guild.name)
     await ctx.send(file=discord.File(p))
 
 @bot.command()
@@ -1885,10 +1970,42 @@ async def clearplayermenu(ctx):
     save_data(data)
     await ctx.send("✅ 已清除玩家入口紀錄。", delete_after=5)
 
+@bot.event
+async def on_command(ctx):
+    logger.info(
+        "[PREFIX] command=%s user=%s guild=%s channel=%s",
+        getattr(ctx.command, "qualified_name", None),
+        getattr(ctx.author, "id", None),
+        getattr(ctx.guild, "id", None),
+        getattr(ctx.channel, "id", None)
+    )
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    logger.error(
+        "[PREFIX ERROR] command=%s user=%s error=%r",
+        getattr(ctx.command, "qualified_name", None),
+        getattr(ctx.author, "id", None),
+        error,
+        exc_info=(type(error), error, error.__traceback__)
+    )
+
+
+@bot.event
+async def on_disconnect():
+    logger.warning("[GATEWAY] disconnected")
+
+
+@bot.event
+async def on_resumed():
+    logger.info("[GATEWAY] resumed")
+
+
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
     """所有 Slash Command 的最後保護，避免 Discord 只顯示『該申請未受回應』。"""
-    print(f"[Slash Error] {type(error).__name__}: {error}")
+    logger.error("[SLASH ERROR] %s: %s", type(error).__name__, error, exc_info=(type(error), error, error.__traceback__))
 
     message = f"❌ 指令執行發生錯誤：{type(error).__name__}: {error}"
 
@@ -1898,18 +2015,20 @@ async def on_app_command_error(interaction: discord.Interaction, error):
         else:
             await interaction.response.send_message(message, ephemeral=True)
     except Exception as notify_ex:
-        print(f"[Slash Error][notify failed] {type(notify_ex).__name__}: {notify_ex}")
+        logger.error("[SLASH ERROR][notify failed] %s: %s", type(notify_ex).__name__, notify_ex, exc_info=(type(notify_ex), notify_ex, notify_ex.__traceback__))
 
 
 @bot.event
 async def on_ready():
-    print("==============================")
-    print(f"Bot ready: {bot.user}")
-    print(f"Latency: {bot.latency}")
-    print("==============================")
+    logger.info(
+        "[READY] user=%s id=%s guilds=%d latency=%.3fs",
+        bot.user, getattr(bot.user, "id", None), len(bot.guilds), bot.latency
+    )
 
 if __name__ == "__main__":
     if not TOKEN:
         raise RuntimeError("找不到 DISCORD_TOKEN 或 .token")
-    threading.Thread(target=run_flask, daemon=True).start()
-    bot.run(TOKEN)
+    threading.Thread(target=run_flask, daemon=True, name="flask-server").start()
+    threading.Thread(target=process_watchdog, daemon=True, name="discord-watchdog").start()
+    logger.info("[START] starting Discord bot | runtime_log=%s", BOT_LOG_FILE)
+    bot.run(TOKEN, log_handler=None)
